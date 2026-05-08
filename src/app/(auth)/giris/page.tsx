@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { z } from "zod";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Mail, Lock, Eye, EyeOff, AlertCircle, ShieldCheck } from "lucide-react";
+import { Mail, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 
 const schema = z.object({
@@ -39,14 +39,6 @@ function GirisPageInner() {
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-
-  // MFA state
-  const [mfaStep, setMfaStep] = useState(false);
-  const [mfaCode, setMfaCode] = useState("");
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
-  const [mfaLoading, setMfaLoading] = useState(false);
-  const mfaInputRef = useRef<HTMLInputElement>(null);
-
   const supabase = createClient();
 
   useEffect(() => {
@@ -86,48 +78,11 @@ function GirisPageInner() {
         return;
       }
 
-      // Check if MFA is required
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (aal && aal.nextLevel === "aal2" && aal.nextLevel !== aal.currentLevel) {
-        const { data: factorsData } = await supabase.auth.mfa.listFactors();
-        const totpFactor = factorsData?.totp?.[0];
-        if (totpFactor) {
-          setMfaFactorId(totpFactor.id);
-          setMfaStep(true);
-          setIsLoading(false);
-          setTimeout(() => mfaInputRef.current?.focus(), 100);
-          return;
-        }
-      }
-
       toast.success("Xoş gəldiniz!");
       setTimeout(() => { window.location.href = "/panel"; }, 1000);
     } catch (err) {
       toast.error("Giriş xətası baş verdi");
       setIsLoading(false);
-    }
-  };
-
-  const handleMfaVerify = async () => {
-    if (!mfaFactorId || mfaCode.length !== 6) return;
-    setMfaLoading(true);
-    try {
-      const { error } = await supabase.auth.mfa.challengeAndVerify({
-        factorId: mfaFactorId,
-        code: mfaCode,
-      });
-      if (error) {
-        toast.error("Kod yanlışdır, yenidən cəhd edin");
-        setMfaCode("");
-        mfaInputRef.current?.focus();
-        setMfaLoading(false);
-        return;
-      }
-      toast.success("Xoş gəldiniz!");
-      setTimeout(() => { window.location.href = "/panel"; }, 1000);
-    } catch {
-      toast.error("Doğrulama xətası baş verdi");
-      setMfaLoading(false);
     }
   };
 
@@ -158,47 +113,6 @@ function GirisPageInner() {
       setResending(false);
     }
   };
-
-  if (mfaStep) {
-    return (
-      <div className="text-center py-4">
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <ShieldCheck className="w-8 h-8 text-primary" />
-        </div>
-        <h2 className="font-heading text-2xl font-bold mb-2">İki addımlı doğrulama</h2>
-        <p className="text-muted-foreground text-sm mb-6">
-          Authenticator tətbiqinizdəki 6 rəqəmli kodu daxil edin
-        </p>
-        <div className="space-y-4">
-          <Input
-            ref={mfaInputRef}
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            placeholder="000000"
-            value={mfaCode}
-            onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => e.key === "Enter" && handleMfaVerify()}
-            className="text-center text-2xl tracking-[0.5em] font-mono h-14"
-          />
-          <Button
-            onClick={handleMfaVerify}
-            disabled={mfaCode.length !== 6 || mfaLoading}
-            className="w-full"
-          >
-            {mfaLoading ? "Yoxlanılır..." : "Təsdiq et"}
-          </Button>
-          <button
-            type="button"
-            onClick={() => { setMfaStep(false); setMfaCode(""); }}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Geri qayıt
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (unconfirmedEmail) {
     return (

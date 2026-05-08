@@ -79,16 +79,6 @@ export default function SettingsPage() {
   const [docUploaded, setDocUploaded] = useState(false);
   const docInputRef = useRef<HTMLInputElement>(null);
 
-  // MFA state
-  const [mfaEnabled, setMfaEnabled] = useState(false);
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
-  const [mfaEnrolling, setMfaEnrolling] = useState(false);
-  const [mfaQr, setMfaQr] = useState<string | null>(null);
-  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
-  const [mfaEnrollFactorId, setMfaEnrollFactorId] = useState<string | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
-  const [mfaVerifying, setMfaVerifying] = useState(false);
-  const [mfaDisabling, setMfaDisabling] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -134,16 +124,6 @@ export default function SettingsPage() {
             }
           }
         }
-      }
-    });
-
-    // Load existing MFA factors
-    const supabaseMfa = createClient();
-    supabaseMfa.auth.mfa.listFactors().then(({ data }) => {
-      const totp = data?.totp?.find((f) => f.status === "verified");
-      if (totp) {
-        setMfaEnabled(true);
-        setMfaFactorId(totp.id);
       }
     });
 
@@ -328,60 +308,6 @@ export default function SettingsPage() {
       setDocUploading(false);
       if (docInputRef.current) docInputRef.current.value = "";
     }
-  };
-
-  const handleMfaEnroll = async () => {
-    setMfaEnrolling(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Authenticator" });
-    if (error || !data) {
-      toast.error("MFA aktivləşdirilə bilmədi");
-      setMfaEnrolling(false);
-      return;
-    }
-    setMfaQr(data.totp.qr_code);
-    setMfaSecret(data.totp.secret);
-    setMfaEnrollFactorId(data.id);
-    setMfaEnrolling(false);
-  };
-
-  const handleMfaVerify = async () => {
-    if (!mfaEnrollFactorId || mfaCode.length !== 6) return;
-    setMfaVerifying(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.challengeAndVerify({
-      factorId: mfaEnrollFactorId,
-      code: mfaCode,
-    });
-    if (error) {
-      toast.error("Kod yanlışdır, yenidən cəhd edin");
-      setMfaCode("");
-      setMfaVerifying(false);
-      return;
-    }
-    setMfaEnabled(true);
-    setMfaFactorId(mfaEnrollFactorId);
-    setMfaQr(null);
-    setMfaSecret(null);
-    setMfaEnrollFactorId(null);
-    setMfaCode("");
-    toast.success("İki addımlı doğrulama aktivləşdirildi!");
-    setMfaVerifying(false);
-  };
-
-  const handleMfaDisable = async () => {
-    if (!mfaFactorId) return;
-    setMfaDisabling(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
-    if (error) {
-      toast.error("MFA deaktiv edilə bilmədi");
-    } else {
-      setMfaEnabled(false);
-      setMfaFactorId(null);
-      toast.success("İki addımlı doğrulama deaktiv edildi");
-    }
-    setMfaDisabling(false);
   };
 
   return (
@@ -604,80 +530,6 @@ export default function SettingsPage() {
           )}
         </section>
       )}
-
-      {/* Two-Factor Authentication */}
-      <section className="bg-white rounded-2xl border border-border p-6 mb-4">
-        <h2 className="font-heading font-semibold mb-1 flex items-center gap-2">
-          <Shield className="w-4 h-4 text-primary" />
-          İki addımlı doğrulama (2FA)
-        </h2>
-        <p className="text-xs text-muted-foreground mb-4">
-          Hesabınızı qorumaq üçün authenticator tətbiqi ilə əlavə təhlükəsizlik qatı əlavə edin
-        </p>
-
-        {mfaEnabled ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
-              <Check className="w-4 h-4 shrink-0" />
-              İki addımlı doğrulama aktivdir
-            </div>
-            <Button
-              variant="outline"
-              className="w-full text-destructive border-destructive/30 hover:bg-destructive/5"
-              onClick={handleMfaDisable}
-              disabled={mfaDisabling}
-            >
-              {mfaDisabling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deaktiv edilir...</> : "2FA-nı deaktiv et"}
-            </Button>
-          </div>
-        ) : mfaQr ? (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Aşağıdakı QR kodu Google Authenticator, Authy və ya oxşar tətbiqlə skan edin:
-            </p>
-            <div className="flex flex-col items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={mfaQr} alt="MFA QR Code" className="w-48 h-48 rounded-xl border border-border" />
-              {mfaSecret && (
-                <div className="w-full">
-                  <p className="text-xs text-muted-foreground mb-1 text-center">Əl ilə daxil etmək üçün gizli açar:</p>
-                  <p className="text-xs font-mono bg-muted rounded-lg px-3 py-2 text-center tracking-widest break-all select-all">{mfaSecret}</p>
-                </div>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tətbiqdəki 6 rəqəmli kodu daxil edin</Label>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="000000"
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-                className="w-full text-center text-2xl tracking-[0.5em] font-mono h-14 rounded-xl border border-border bg-background px-3 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <Button
-              onClick={handleMfaVerify}
-              disabled={mfaCode.length !== 6 || mfaVerifying}
-              className="w-full"
-            >
-              {mfaVerifying ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Yoxlanılır...</> : "Təsdiq et və aktivləşdir"}
-            </Button>
-            <button
-              type="button"
-              onClick={() => { setMfaQr(null); setMfaSecret(null); setMfaEnrollFactorId(null); setMfaCode(""); }}
-              className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Ləğv et
-            </button>
-          </div>
-        ) : (
-          <Button onClick={handleMfaEnroll} disabled={mfaEnrolling} className="w-full">
-            {mfaEnrolling ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Hazırlanır...</> : "2FA-nı aktivləşdir"}
-          </Button>
-        )}
-      </section>
 
       {/* Password Change */}
       <section className="bg-white rounded-2xl border border-border p-6 mb-4">
